@@ -30,37 +30,52 @@ function LoadInstance(filename::String)::Instance
     depot_cap = parse.(Int64,values[counter+1:7:counter+1 + 7*num_dep-1])
     depot_nveh = parse.(Int64,values[counter+2:7:counter+2 + 7*num_dep-1])
     depot_vfc = parse.(Int64,values[counter+3:7:counter+3 + 7*num_dep-1])
-    depot_xcord = parse.(Int64,values[counter+4:7:counter+4 + 7*num_dep-1])
-    depot_ycord = parse.(Int64,values[counter+5:7:counter+5 + 7*num_dep-1])
+    depot_cords = zeros(Float64,2,num_dep)
+    it = counter+4
+    for i in 1:2
+        depot_cords[i, :] = parse.(Float64,values[it:7:it + 7*num_dep-1])
+        it += 1
+    end
 
-    depots_struct = Depot(depot_demand,depot_cap,depot_nveh,depot_vfc,depot_xcord,depot_ycord)
+    depots_struct = Depot(depot_demand,depot_cap,depot_nveh,depot_vfc,depot_cords)
 
     counter += 7*num_dep + 8
 
     satelites_cap = parse.(Int64,values[counter:8:counter + 8*num_sat-1])
     satelites_nveh = parse.(Int64,values[counter+1:8:counter+1 + 8*num_sat-1])
     satelites_vfc = parse.(Int64,values[counter+2:8:counter+2 + 8*num_sat-1])
-    satelites_xcord = parse.(Int64,values[counter+3:8:counter+3 + 8*num_sat-1])
-    satelites_ycord = parse.(Int64,values[counter+4:8:counter+4 + 8*num_sat-1])
+    satelites_cords = zeros(Float64,2,num_sat)
+    it = counter+3
+    for i in 1:2
+        satelites_cords[i, :] = parse.(Float64,values[it:8:it + 8*num_sat-1])
+        it += 1
+    end
     satelites_uhcost = parse.(Float64,values[counter+5:8:counter+5 + 8*num_sat-1])
     satelites_uhtime = parse.(Float64,values[counter+6:8:counter+6 + 8*num_sat-1])
 
-    satelites_struct = Satelite(satelites_cap,satelites_nveh,satelites_vfc,satelites_xcord,satelites_ycord,satelites_uhcost,satelites_uhtime)
+    satelites_struct = Satelite(satelites_cap,satelites_nveh,satelites_vfc,satelites_cords,satelites_uhcost,satelites_uhtime)
 
     counter += 8*num_sat + 3
 
-    pickup_xcord = parse.(Float64,values[counter:3:counter + 3*num_pic-1])
-    pickup_ycord = parse.(Float64,values[counter+1:3:counter+1 + 3*num_pic-1])
+    pickup_cords = zeros(Float64,2,num_pic)
+    it = counter
+    for i in 1:2
+        pickup_cords[i, :] = parse.(Float64,values[it:3:it + 3*num_pic-1])
+        it += 1
+    end
 
-    pickup_struct = PickupFacility(pickup_xcord,pickup_ycord)
+    pickup_struct = PickupFacility(pickup_cords)
 
     counter += 3*num_pic + 4
 
     customer_demand = parse.(Int64,values[counter:4:counter + 4*num_cus-1])
-    customer_xcord = parse.(Float64,values[counter+1:4:counter+1 + 4*num_cus-1])
-    customer_ycord = parse.(Float64,values[counter+2:4:counter+2 + 4*num_cus-1])
-
-    customers_struct = Customer(customer_demand,customer_xcord,customer_ycord)
+    customer_cords = zeros(Float64,2,num_cus)
+    it = counter+1
+    for i in 1:2
+        customer_cords[i, :] = parse.(Float64,values[it:4:it + 4*num_cus-1])
+        it +=1
+    end
+    customers_struct = Customer(customer_demand,customer_cords)
 
     counter += 4*num_cus-1
     
