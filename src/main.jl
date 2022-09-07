@@ -11,7 +11,8 @@ function GreedySecondLevel(instance::Instance)
     
     #Assign customers to best satelite and remove from unassigned
     assignment_list = AssignCustomersToSatelite(best_satelite,instance,unassigned_customers, distances)
-
+    filter!(x->!(x in assignment_list),unassigned_customers)
+    println(unassigned_customers)
 end
 
 function DistanceCustomerSatelite(instance::Instance)::Matrix{Float64}
