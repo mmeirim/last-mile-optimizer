@@ -1,7 +1,8 @@
-using Distances, JuMP, GLPK
+using Distances, JuMP, HiGHS, Graphs, GraphPlot, Compose
 include("service/load_service.jl")
+include("service/graph_service.jl")
 
-instance = LoadInstance("../data/I2-4-10-10.txt")
+instance = LoadInstance("/home/matheus.meirim/projetos/last-mile-optimizer/data/I2-4-10-50.txt")
 
 function GreedySecondLevel(instance::Instance)
     #Compute the number of unassigned customers whose closest satelite is k
@@ -44,14 +45,16 @@ end
 
 #MTZ formulation
 function RoutingAlgorithm(best_satelite, assignment_list, instance::Instance)
-    deterministic_routes_dict = Dict{Int64,Matrix}()
-    deterministic_u_dict = Dict{Int64,Vector}()
-    deterministic_obj_value_dict = Dict{Int64,Float64}()
+    routes_dict = Dict{Int64,Matrix}()
+    u_dict = Dict{Int64,Vector}()
+    obj_value_dict = Dict{Int64,Float64}()
     
-    # 0 represents the satelite/depot
-    nodes = vcat(0,assignment_list)
-    model_deterministic = Model(GLPK.Optimizer)
+    # 1 represents the satelite/depot and customers have their id added in 1 unit
+    nodes = vcat(1,assignment_list.+1)
+    model_deterministic = Model(HiGHS.Optimizer)
     # set_optimizer_attribute(model, "LogLevel",0)
+    set_optimizer_attribute(model_deterministic, "time_limit", 60.0)
+
     @variables(model_deterministic,
     begin
         x[nodes,nodes], Bin
@@ -62,35 +65,28 @@ function RoutingAlgorithm(best_satelite, assignment_list, instance::Instance)
     begin
         ct1[j in nodes[2:end]], sum(x[i,j] for i in nodes) == 1 #vehicle leaves node that it enters
         ct2[i in nodes[2:end]], sum(x[i,j] for j in nodes) == 1 #vehicle leaves node that it enters
-        ct3, sum(x[i,0] for i in nodes) == instance.f2_size #every vehicle returns to the depot
-        ct4, sum(x[0,j] for j in nodes) == instance.f2_size #every vehicle leaves the depot
-        ct5[i in nodes[2:end], j in nodes[2:end]; i != j], u[j] - u[i] + (instance.v2_cap)*(1-x[i,j]) ≥ instance.customers.demand[j] #MTZ constraint
-        ct6[i in nodes[2:end]], instance.customers.demand[i] ≤ u[i] ≤ (instance.v2_cap) #MTZ constraint
+        ct3, sum(x[i,1] for i in nodes) == instance.satelites.num_veh[best_satelite] #every vehicle returns to the depot
+        ct4, sum(x[1,j] for j in nodes) == instance.satelites.num_veh[best_satelite] #every vehicle leaves the depot
+        ct5[i in nodes[2:end], j in nodes[2:end]; i != j], u[j] - u[i] + (instance.v2_cap)*(1-x[i,j]) ≥ instance.customers.demand[j-1] #MTZ constraint
+        ct6[i in nodes[2:end]], instance.customers.demand[i-1] ≤ u[i] ≤ (instance.v2_cap) #MTZ constraint
         ct7[i in nodes], x[i,i] == 0 #avoiding cycles
         # ct8[] #respecting vehicle working time
     end)
 
-    vehicle_cost = instance.satelites.v_fixcost[best_satelite]*sum(x[0,j] for j in nodes)
-    arcs_cost = sum(instance.ud2 *x[i,j] * euclidean(instance.customers.cords[i],instance.customers.cords[j]) for i in nodes[2:end] for j in nodes[2:end]) +  sum(instance.ud2 *x[0,j] * euclidean(instance.satelites.cords[best_satelite],instance.customers.cords[j]) for j in nodes[2:end]) +  sum(instance.ud2 *x[i,0] * euclidean(instance.satelites.cords[best_satelite],instance.customers.cords[i]) for i in nodes[2:end])
+    vehicle_cost = instance.satelites.v_fixcost[best_satelite]*sum(x[1,j] for j in nodes)
+    arcs_cost = sum(instance.ud2 *x[i,j] * euclidean(instance.customers.cords[i-1],instance.customers.cords[j-1]) for i in nodes[2:end] for j in nodes[2:end]) +  sum(instance.ud2 *x[1,j] * euclidean(instance.satelites.cords[best_satelite],instance.customers.cords[j-1]) for j in nodes[2:end]) +  sum(instance.ud2 *x[i,1] * euclidean(instance.satelites.cords[best_satelite],instance.customers.cords[i-1]) for i in nodes[2:end])
     assignment_cost = 0 
-    handling_cost = sum(instance.satelites.uhcost[best_satelite] * x[i,j] * instance.customers.demand[i] for i in nodes[2:end] for j in nodes)
+    handling_cost = sum(instance.satelites.uhcost[best_satelite] * x[i,j] * instance.customers.demand[i-1] for i in nodes[2:end] for j in nodes)
 
     @objective(model_deterministic, Min, vehicle_cost+arcs_cost+assignment_cost+handling_cost)
-    # set_optimizer_attribute(model_deterministic, "TimeLimit", 60)
-    # set_optimizer_attribute(model_deterministic, "OutputFlag", 0)
+
     optimize!(model_deterministic)
+    
     obj_value = objective_value(model_deterministic)
     println("Objective value: $(obj_value)")
     println("Termination status: $(termination_status(model_deterministic))")
-    u_list = [value.(u)[CartesianIndex(i)] for i in 1:(instance.dimension-1)]
-    x_matrix = zeros(Int64, instance.dimension, instance.dimension)
-    for i in nodes
-        for j in nodes
-            x_matrix[i,j] = value.(x)[CartesianIndex(i,j)]
-        end
-    end
-    push!(deterministic_routes_dict, iter => x_matrix)
-    push!(deterministic_u_dict, iter => u_list)
-    println(deterministic_routes_dict)
+    
+    x_values = value.(x)
+    G = GenerateGraph(nodes,x_values)
+    
 end
-GreedySecondLevel(instance)
